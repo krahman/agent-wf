@@ -20,7 +20,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          python-version-file: .python-version
       - run: uv sync --locked
       - run: uv run pytest -q
 
@@ -31,7 +30,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          python-version-file: .python-version
       - run: uv sync --locked
       - run: uv run ruff check
 

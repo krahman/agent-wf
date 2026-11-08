@@ -19,10 +19,10 @@
 ## 4. Documentation and integration
 
 - [x] 4.1 Add a CI section to `AGENTS.md` listing the three checks and the local equivalents (`uv sync --locked`, `uv run pytest`, `uv run ruff check`, `docker build .`); verify every command shown runs as written
+- [x] 4.2 Open a pull request with these changes; verify the three jobs (`test`, `lint`, `docker`) appear on it, all pass, and a second push to the same branch cancels the in-progress run
+- [x] 4.3 On that pull request, push a throwaway commit with a failing test and confirm the `test` job fails and the PR shows a failed check; then drop the commit
 
 ## Workflow follow-up
 
-- Deferred by the user (no GitHub remote yet): open a pull request and verify the three jobs (`test`, `lint`, `docker`) appear on it and pass, and that a second push to the same branch cancels the in-progress run.
-- Deferred by the user: on that pull request, push a throwaway commit with a failing test and confirm the `test` job fails and the PR shows a failed check, then drop the commit.
 - In the GitHub repository settings, mark `test`, `lint` and `docker` as required status checks on `main` (a repository setting, not a file in the repo).
-- Archive the change after the pull request is merged.
+- Archive the change after PR #1 (which carries the two fixes found by the first real run) is merged.
