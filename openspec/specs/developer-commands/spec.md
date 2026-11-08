@@ -28,6 +28,21 @@ The system SHALL provide a target for each everyday task: installing locked depe
 - **WHEN** a contributor runs `make keygen`
 - **THEN** it prints one new random key of 64 hexadecimal characters
 
+### Requirement: Conversation state has operator targets
+The system SHALL provide targets to migrate the conversation state database, to prune idle conversations, and to run the database-backed tests against a throwaway database.
+
+#### Scenario: Migrating the state database
+- **WHEN** a contributor runs `make migrate` against a running state database
+- **THEN** the schema is created or upgraded, and running it again succeeds without changes
+
+#### Scenario: Pruning idle conversations
+- **WHEN** a contributor runs `make prune`
+- **THEN** conversations idle longer than the configured retention are deleted and the number deleted is printed
+
+#### Scenario: Running the database tests
+- **WHEN** a contributor runs `make test-db` with Docker available
+- **THEN** a throwaway database is started, the database-backed tests run against it, and the database is removed afterwards whether the tests pass or fail
+
 ### Requirement: Check mirrors CI
 The system SHALL provide a `check` target that runs the same checks as the CI jobs (locked dependency install, the unit tests, lint, the container image build and compose file validation), SHALL fail when any of them fails, and MUST NOT need an LLM API key or an existing `.env` file.
 
@@ -55,7 +70,7 @@ The system SHALL append the `ARGS` variable to the commands of the test, eval an
 - **THEN** the eval run receives `--eval-repeats 1`
 
 ### Requirement: Destructive actions are explicit
-The system SHALL give data-deleting actions their own target that refuses to run unless `CONFIRM=yes` is given, and no other target SHALL delete the compose stack's data volumes.
+The system SHALL give data-deleting actions their own target that refuses to run unless `CONFIRM=yes` is given, and no other target SHALL delete the compose stack's data volumes. Deleting the stack's data includes the stored conversations.
 
 #### Scenario: Reset without confirmation
 - **WHEN** a contributor runs `make reset` without `CONFIRM=yes`
@@ -68,6 +83,10 @@ The system SHALL give data-deleting actions their own target that refuses to run
 #### Scenario: Cleaning
 - **WHEN** a contributor runs `make clean`
 - **THEN** only caches and eval reports are removed
+
+#### Scenario: Reset with confirmation
+- **WHEN** a contributor runs `make reset CONFIRM=yes`
+- **THEN** the stored conversations are deleted together with the other stack data
 
 ### Requirement: Secrets and existing files are protected
 The system SHALL create `.env` from the example only when it does not already exist, and MUST NOT print any secret value read from `.env` or the environment; the only secret a target may print is a key it has just generated.

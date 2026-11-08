@@ -18,7 +18,7 @@ The system SHALL reject a prompt longer than the configured maximum number of ch
 - **THEN** the response status is 422 and no LLM call is made
 
 ### Requirement: Conversation IDs have a safe format
-The system SHALL accept a `thread_id` only if it is 1 to 64 characters long and contains only letters, digits, hyphens and underscores, and SHALL reject any other value with status 422. When no `thread_id` is given, the system SHALL generate one.
+The system SHALL accept a `thread_id` only if it is 1 to 64 characters long and contains only letters, digits, hyphens and underscores, and SHALL reject any other value with status 422. When no `thread_id` is given, the system SHALL process the request as a single run without saved conversation state.
 
 #### Scenario: Valid thread ID
 - **WHEN** a request carries the thread ID `order-1234_a`
@@ -30,7 +30,7 @@ The system SHALL accept a `thread_id` only if it is 1 to 64 characters long and 
 
 #### Scenario: No thread ID
 - **WHEN** a request carries no thread ID
-- **THEN** the request is processed under a newly generated ID
+- **THEN** the request is processed without saved conversation state and nothing of it can be continued later
 
 ### Requirement: Agent runs are time-bounded
 The system SHALL cancel an agent run that exceeds the configured time budget and SHALL report it as a timeout (status 504). The default budget SHALL be 90 seconds.
