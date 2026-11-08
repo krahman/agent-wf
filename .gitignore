@@ -13,16 +13,6 @@ __pycache__/
 .idea/
 .DS_Store
 .mypy_cache/
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/raw/manifest.json
-
-# internal
-docs/*.pdf
-docs/DEMO_SCRIPT.md
 
 # Agents
-.claude
-CLAUDE.md
+.claude/settings.local.json

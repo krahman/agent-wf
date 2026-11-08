@@ -1,0 +1,11 @@
+.venv
+.git
+.idea
+.env
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.ipynb_checkpoints
+examples
+tests
+.python-version
