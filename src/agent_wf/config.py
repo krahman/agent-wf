@@ -16,10 +16,20 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     git_sha: str = "unknown"  # injected at image build time
 
+    api_auth_enabled: bool = True
+    api_keys: SecretStr | None = None  # comma-separated; several keys allow rotation
+    max_prompt_chars: int = 4000
+    agent_timeout_seconds: float = 90.0
+
     langfuse_tracing: bool = False
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str = "http://localhost:3000"
+
+    def api_key_list(self) -> list[str]:
+        if self.api_keys is None:
+            return []
+        return [k.strip() for k in self.api_keys.get_secret_value().split(",") if k.strip()]
 
 
 @lru_cache

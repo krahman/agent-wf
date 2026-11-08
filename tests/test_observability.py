@@ -1,13 +1,8 @@
 import logging
 
-from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage
-
-import agent_wf.api.app as app_module
 from agent_wf.config import Settings
 from agent_wf.observability import configure_tracing, trace_callbacks
 from agent_wf.tools.math import add_numbers
-from tests.test_api import FakeLLM
 
 
 def test_callback_logs_tool_call(caplog):
@@ -19,12 +14,10 @@ def test_callback_logs_tool_call(caplog):
     assert "tool_start name=add_numbers" in text and "tool_end name=add_numbers" in text
 
 
-def test_request_id_header_roundtrip(monkeypatch):
-    monkeypatch.setattr(app_module, "build_llm", lambda *a, **k: FakeLLM(messages=iter([AIMessage("hi")] * 5)))
-    with TestClient(app_module.app) as client:
-        r = client.get("/", headers={"x-request-id": "abc"})
-        assert r.headers["x-request-id"] == "abc"
-        assert client.get("/").headers["x-request-id"]
+def test_request_id_header_roundtrip(client):
+    r = client.get("/", headers={"x-request-id": "abc"})
+    assert r.headers["x-request-id"] == "abc"
+    assert client.get("/").headers["x-request-id"]
 
 
 def test_tracing_disabled_by_default():
