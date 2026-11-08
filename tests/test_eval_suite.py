@@ -103,3 +103,34 @@ def test_negative_number_case_accepts_symbols_and_words_but_not_the_positive():
     for right in ("The result is -2.", "The result is \u22122.", "That is minus 2.", "That is negative 2."):
         assert replay("negative-numbers", calls, right) == [], right
     assert replay("negative-numbers", calls, "The result is 2.")
+
+
+# --- the quick subset
+
+
+QUICK = {"add-indonesian", "subtract-argument-order", "lookup-then-calculate"}
+
+
+def test_the_quick_subset_is_exactly_three_cases_covering_different_things():
+    quick = [c for c in load_cases() if "quick" in c.tags]
+    assert {c.id for c in quick} == QUICK
+    tags = {t for c in quick for t in c.tags}
+    assert {"non_english", "argument_order", "lookup"} <= tags, "the quick cases should differ, not repeat"
+
+
+def collected(marker_expression):
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-m", marker_expression, "--collect-only", "-q", "-p", "no:cacheprovider"],
+        check=False, capture_output=True, text=True, cwd=__import__("pathlib").Path(__file__).parent.parent,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "warning" not in result.stdout.lower(), result.stdout  # e.g. an unregistered marker
+    return {line.split("[")[1].rstrip("]") for line in result.stdout.splitlines() if "test_agent_case[" in line}
+
+
+def test_the_quick_marker_selects_the_three_cases_and_the_full_run_selects_all():
+    assert collected("eval and quick") == QUICK
+    assert collected("eval") == {c.id for c in load_cases()}

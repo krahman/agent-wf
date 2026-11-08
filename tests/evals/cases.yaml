@@ -1,4 +1,5 @@
 # Eval cases: each runs the agent against a real model; `uv run pytest -m eval` (see AGENTS.md).
+# Cases tagged `quick` form a 3-case subset for fast checks: `make eval-quick`.
 # Checks are plain assertions on the tools called and the final answer; see tests/evals/harness.py.
 # Numbers in answers are checked with `answer_number`, which compares values, so 3500 / 3,500 / 3.500 and
 # 6.25 / 6,25 all match while 2 never matches inside 12 or 20. The model also answers in the prompt's
@@ -22,7 +23,7 @@
 
 - id: add-indonesian
   prompt: satu ditambah satu
-  tags: [add, non_english]
+  tags: [add, non_english, quick]
   checks:
     expect_tools: [add_numbers]
     tool_args:
@@ -49,7 +50,7 @@
 
 - id: subtract-argument-order
   prompt: What is 10 minus 3?
-  tags: [subtract, argument_order]
+  tags: [subtract, argument_order, quick]
   checks:
     expect_tools: [subtract_numbers]
     tool_args:
@@ -179,7 +180,7 @@
 
 - id: lookup-then-calculate
   prompt: How tall is the Eiffel Tower in metres, and what is that height multiplied by 2?
-  tags: [lookup, multiply]
+  tags: [lookup, multiply, quick]
   checks:
     expect_tools: [search_wikipedia, multiply_numbers]
     answer_number:

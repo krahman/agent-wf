@@ -10,7 +10,11 @@ pytestmark = pytest.mark.eval
 CASES = load_cases()
 
 
-@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
+# A case tagged `quick` also gets the `quick` marker, so `-m "eval and quick"` selects the fast subset.
+PARAMS = [pytest.param(c, id=c.id, marks=[pytest.mark.quick] if "quick" in c.tags else []) for c in CASES]
+
+
+@pytest.mark.parametrize("case", PARAMS)
 def test_agent_case(case, eval_options, agent_for, tracer):
     agent = agent_for(case.agent)
     limit = get_settings().agent_recursion_limit

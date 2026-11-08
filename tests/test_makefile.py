@@ -97,6 +97,7 @@ def test_args_are_passed_to_test_fix_and_eval():
     assert "pytest -q -k limits" in dry("test", "ARGS=-k limits")
     assert "ruff check --fix --unsafe-fixes" in dry("fix", "ARGS=--unsafe-fixes")
     assert "pytest -m eval --eval-repeats 1" in dry("eval", "ARGS=--eval-repeats 1")
+    assert 'pytest -m "eval and quick" --eval-repeats 1' in dry("eval-quick", "ARGS=--eval-repeats 1")
 
 
 def test_tool_can_be_overridden():
@@ -109,6 +110,7 @@ def test_core_targets_run_the_documented_commands():
     assert "uv run pytest -q" in dry("test")
     assert "uv run ruff check" in dry("lint")
     assert "uv run pytest -m eval" in dry("eval")
+    assert 'uv run pytest -m "eval and quick"' in dry("eval-quick")
     assert "pytest -m eval --collect-only -q" in dry("eval-list")
     assert "fastapi dev main.py" in dry("dev")
     assert "openspec validate --all --strict" in dry("spec-check")

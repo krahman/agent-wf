@@ -12,14 +12,14 @@ GIT_SHA = $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
 .DEFAULT_GOAL := help
 .NOTPARALLEL:
-.PHONY: help install lock env keygen version dev health test lint fix eval eval-list smoke spec-check
+.PHONY: help install lock env keygen version dev health test lint fix eval eval-quick eval-list smoke spec-check
 .PHONY: build compose-check up down logs ps reset check clean
 
 help: ## Show this list
 	@awk 'BEGIN { FS = ":.*## " } \
 		/^##@/ { printf "\n%s\n", substr($$0, 5) } \
 		/^[a-zA-Z_-]+:.*## / { printf "  %-14s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@printf '\nOptions: ARGS="..." adds options to test, fix, eval and logs; UV, COMPOSE, IMAGE can be overridden; CONFIRM=yes confirms reset.\n'
+	@printf '\nOptions: ARGS="..." adds options to test, fix, eval, eval-quick and logs; UV, COMPOSE, IMAGE can be overridden; CONFIRM=yes confirms reset.\n'
 
 ##@ Setup
 install: ## Install locked dependencies (same as CI)
@@ -57,6 +57,9 @@ fix: ## Auto-fix lint problems (ARGS passes options)
 
 eval: ## Run the real-model evals (needs OPENROUTER_API_KEY, costs a few cents; ARGS passes options)
 	$(UV) run pytest -m eval $(ARGS)
+
+eval-quick: ## Run only the 3 quick evals (about 20 s; needs OPENROUTER_API_KEY; ARGS passes options)
+	$(UV) run pytest -m "eval and quick" $(ARGS)
 
 eval-list: ## List the eval cases without running them
 	$(UV) run pytest -m eval --collect-only -q

@@ -30,7 +30,10 @@ packages = ["src/agent_wf"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-m 'not eval'"
-markers = ["eval: runs the agent against a real model (opt-in: pytest -m eval)"]
+markers = [
+    "eval: runs the agent against a real model (opt-in: pytest -m eval)",
+    "quick: the 3-case eval subset (pytest -m \"eval and quick\")",
+]
 filterwarnings = [
     # langsmith (pulled in by langchain-core) still calls asyncio.iscoroutinefunction, deprecated in
     # Python 3.14 and removed in 3.16. Only this message from this module is hidden; remove the filter

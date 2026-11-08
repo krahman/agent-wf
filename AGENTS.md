@@ -61,7 +61,7 @@ Check it: `docker compose ps api` and `docker exec agent-wf-api-1 id -u` (prints
 
 ## Evals
 Real-model checks of the agent's behaviour (which tools it calls, with what arguments, what it answers). They are opt-in: `uv run pytest` and CI never run them, call no LLM and need no key.
-- Run all: `make eval` (`uv run pytest -m eval`; needs `OPENROUTER_API_KEY`; a run costs a few cents). One case: `make eval ARGS="-k divide-by-zero"`. List cases without running: `make eval-list`.
+- Run all: `make eval` (`uv run pytest -m eval`; needs `OPENROUTER_API_KEY`; a run costs a few cents). **Quick check: `make eval-quick`** runs only the 3 cases tagged `quick` (about 20 s): `add-indonesian`, `subtract-argument-order`, `lookup-then-calculate`. Tag a case `quick` in `cases.yaml` to include it. One case: `make eval ARGS="-k divide-by-zero"`. List cases without running: `make eval-list`.
 - Options: `--eval-repeats N` (default 3, run at temperature 0), `--eval-min-pass-rate R` (default 1.0; a case passes when this fraction of its repeats pass), `--eval-model NAME` (default `LLM_MODEL`; use it to compare models), `--eval-trace` (see below).
 - Each run writes `tests/evals/results/<time>-<model>.json` (model, version, commit, per-case pass rate and failure reasons). It is gitignored; compare two reports after a prompt, tool or model change.
 - The Wikipedia tool's network call (`fetch_pages` in `tools/wikipedia.py`) is stubbed with one fixed page (the Eiffel Tower); the real tool, its description and its formatting still run, so results do not depend on Wikipedia. The scoring logic has ordinary unit tests (`tests/test_eval_*.py`) that run in the default suite.
@@ -114,7 +114,7 @@ The `Makefile` is the single list of project commands: `make help` shows every t
 | `make dev` | run the API locally with auto-reload (needs `.env`) |
 | `make test` / `make lint` / `make fix` | unit tests (offline) / ruff check / ruff with `--fix` |
 | `make check` | everything CI runs, in order: install, tests, lint, image build, compose validation. Needs Docker running, no key and no `.env`; for a quick loop without Docker use `make test lint` |
-| `make eval` / `make eval-list` | the real-model evals (a few cents per run) / list the cases |
+| `make eval` / `make eval-quick` / `make eval-list` | the real-model evals (a few cents per run) / only the 3 `quick` cases (about 20 s) / list the cases |
 | `make smoke` | live check of the Wikipedia tool against the real API |
 | `make build` | the image, tagged with the project version and git commit |
 | `make up` / `down` / `logs` / `ps` / `health` | the compose stack (API and Langfuse): start, stop (data kept), follow logs, containers and health, probe `GET /` |
@@ -122,4 +122,4 @@ The `Makefile` is the single list of project commands: `make help` shows every t
 | `make spec-check` | validate all OpenSpec changes and specs |
 | `make clean` / `make reset` | remove caches and eval reports / also delete the compose data volumes, including Langfuse traces and users (refuses without `CONFIRM=yes`) |
 
-Conventions: `ARGS="..."` adds options to `test`, `fix`, `eval` and `logs` (`make test ARGS="-k limits"`, `make eval ARGS="--eval-repeats 1"`, `make logs ARGS=api`). `UV`, `COMPOSE` and `IMAGE` can be overridden. When CI gains a shell command, add it to `make check` (a test fails otherwise).
+Conventions: `ARGS="..."` adds options to `test`, `fix`, `eval`, `eval-quick` and `logs` (`make test ARGS="-k limits"`, `make eval ARGS="--eval-repeats 1"`, `make logs ARGS=api`). `UV`, `COMPOSE` and `IMAGE` can be overridden. When CI gains a shell command, add it to `make check` (a test fails otherwise).
