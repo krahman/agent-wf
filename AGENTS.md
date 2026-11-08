@@ -44,6 +44,11 @@ Raise `ApiError(status, code, message)` from `api/errors.py` for new errors.
 - One agent run is cancelled after `AGENT_TIMEOUT_SECONDS` (default 90), which bounds the whole loop; `LLM_TIMEOUT` bounds a single model call.
 - Rate limiting and request body size are left to the gateway in front of the API.
 
+## Wikipedia tool
+`search_wikipedia` makes one request to Wikipedia's search API (`fetch_pages`, via `httpx`) and formats up to 3 intro summaries as `Page: <title>\nSummary: <text>`, capped at 4000 characters. Disambiguation pages are skipped; failures come back as `{"error": ...}`, never as exceptions. Requests time out after 10 s and are retried up to 3 times for network errors, 429 and 5xx.
+- Wikipedia rate-limits or blocks (429/403) callers whose User-Agent has no contact info, so every request sends `agent_wf/<version> (+<WIKIPEDIA_CONTACT>)`. The default is this repository's URL; set `WIKIPEDIA_CONTACT` to your own URL or email for a deployment.
+- The unit tests (`tests/test_wikipedia_tool.py`) use a mocked transport and prove nothing about the live API. After touching the tool, smoke test it: `uv run python -c "from agent_wf.tools.wikipedia import search_wikipedia as t; print(t.invoke({'query': 'Eiffel Tower'}))"` (expect `{'result': 'Page: Eiffel Tower...`, not an `error`).
+
 ## Observability
 - Request middleware sets `x-request-id` (echoed in the response); `/agents/{name}` also sets the thread ID for logs.
 - Langfuse (self-hosted, open source) is off by default. Enable with `LANGFUSE_TRACING=true`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` (default `http://localhost:3000`). `thread_id` is sent as the Langfuse session ID. `LOG_LEVEL` sets the log level.
@@ -60,7 +65,7 @@ Real-model checks of the agent's behaviour (which tools it calls, with what argu
 - Options: `--eval-repeats N` (default 3, run at temperature 0), `--eval-min-pass-rate R` (default 1.0; a case passes when this fraction of its repeats pass), `--eval-model NAME` (default `LLM_MODEL`; use it to compare models).
 - Each run writes `tests/evals/results/<time>-<model>.json` (model, version, commit, per-case pass rate and failure reasons). It is gitignored; compare two reports after a prompt, tool or model change.
 - Cases live in `tests/evals/cases.yaml`: `id`, `prompt`, `tags` and `checks` (`expect_tools`, `forbid_tools`, `tool_args`, `answer_contains_any`, `answer_contains_all`, `answer_excludes`, `max_tool_calls`). Add one whenever a change breaks something the suite did not catch. Use `*_any` lists for numbers, since models format them differently.
-- The Wikipedia tool's network call is stubbed with one fixed passage (the Eiffel Tower), so results do not depend on Wikipedia. The scoring logic has ordinary unit tests (`tests/test_eval_*.py`) that run in the default suite.
+- The Wikipedia tool's network call (`fetch_pages` in `tools/wikipedia.py`) is stubbed with one fixed page (the Eiffel Tower); the real tool, its description and its formatting still run, so results do not depend on Wikipedia. The scoring logic has ordinary unit tests (`tests/test_eval_*.py`) that run in the default suite.
 
 ## CI
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. Three jobs, each reproducible locally:

@@ -34,17 +34,18 @@ def test_wikipedia_tool_returns_the_fixed_passage_without_network(monkeypatch):
 
     monkeypatch.setattr(socket.socket, "connect", no_network)
     with support.wikipedia_stub():
-        assert search_wikipedia.invoke({"query": "anything"}) == {"result": support.STUB_PASSAGE}
-        assert search_wikipedia.name == "search_wikipedia"  # the real tool, not a fake
+        result = search_wikipedia.invoke({"query": "anything"})
+        assert result == {"result": f"Page: Eiffel Tower\nSummary: {support.STUB_PASSAGE}"}
+        assert search_wikipedia.name == "search_wikipedia"  # the real tool, formatting included
 
 
 def test_stub_is_removed_afterwards():
-    from langchain_community.utilities import WikipediaAPIWrapper
+    from agent_wf.tools import wikipedia
 
-    original = WikipediaAPIWrapper.run
+    original = wikipedia.fetch_pages
     with support.wikipedia_stub():
-        assert WikipediaAPIWrapper.run is not original
-    assert WikipediaAPIWrapper.run is original
+        assert wikipedia.fetch_pages is not original
+    assert wikipedia.fetch_pages is original
 
 
 # --- one run of one case

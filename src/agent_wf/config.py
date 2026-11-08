@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     api_auth_enabled: bool = True
     api_keys: SecretStr | None = None  # comma-separated; several keys allow rotation
+    wikipedia_contact: str = "https://github.com/krahman/agent-wf"  # sent in the User-Agent
     max_prompt_chars: int = 4000
     agent_timeout_seconds: float = 90.0
 

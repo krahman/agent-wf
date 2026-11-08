@@ -26,3 +26,12 @@ def test_defaults_are_closed_and_bounded():
 
 def test_keys_not_in_repr():
     assert "secret-key" not in repr(Settings(_env_file=None, api_keys="secret-key"))
+
+
+def test_wikipedia_contact_default_override_and_empty(monkeypatch):
+    default = Settings(_env_file=None).wikipedia_contact
+    assert default.startswith("https://") and "agent-wf" in default
+    monkeypatch.setenv("WIKIPEDIA_CONTACT", "ops@example.com")
+    assert Settings(_env_file=None).wikipedia_contact == "ops@example.com"
+    monkeypatch.setenv("WIKIPEDIA_CONTACT", "")
+    assert Settings(_env_file=None).wikipedia_contact == default

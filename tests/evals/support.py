@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from langchain_community.utilities import WikipediaAPIWrapper
 
 from agent_wf.config import Settings
+from agent_wf.tools import wikipedia as wikipedia_tool
 from tests.evals.cases import Case
 from tests.evals.harness import extract_trace, run_checks
 from tests.evals.report import RESULTS_DIR, build_report, run_metadata, write_report
@@ -48,8 +48,9 @@ def require_llm_key(settings: Settings) -> None:
 @contextmanager
 def wikipedia_stub():
     """Replace only the network call inside the Wikipedia tool: the agent still sees the real tool."""
+    stub_pages = [wikipedia_tool.Page("Eiffel Tower", STUB_PASSAGE)]
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(WikipediaAPIWrapper, "run", lambda self, query: STUB_PASSAGE)
+        patch.setattr(wikipedia_tool, "fetch_pages", lambda query, client=None: stub_pages)
         yield
 
 
