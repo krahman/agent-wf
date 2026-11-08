@@ -31,6 +31,12 @@ packages = ["src/agent_wf"]
 testpaths = ["tests"]
 addopts = "-m 'not eval'"
 markers = ["eval: runs the agent against a real model (opt-in: pytest -m eval)"]
+filterwarnings = [
+    # langsmith (pulled in by langchain-core) still calls asyncio.iscoroutinefunction, deprecated in
+    # Python 3.14 and removed in 3.16. Only this message from this module is hidden; remove the filter
+    # once a langsmith release stops using it.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:langsmith._internal._beta_decorator",
+]
 
 [tool.ruff]
 extend-exclude = ["examples"]
