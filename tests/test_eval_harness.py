@@ -123,3 +123,46 @@ def test_multiple_failures_are_all_reported():
 
 def test_empty_checks_detected():
     assert Checks().is_empty() and not Checks(max_tool_calls=1).is_empty()
+
+
+# --- unordered argument lists (commutative operations)
+
+
+def unordered(tool, args):
+    return {"tool_args": [{"tool": tool, "args": args, "unordered": True}]}
+
+
+def test_unordered_accepts_the_numbers_in_another_order():
+    spec = unordered("multiply_numbers", {"numbers": [6, 7]})
+    assert failures(spec, ("multiply_numbers", {"numbers": [7, 6]})) == []
+    assert failures(spec, ("multiply_numbers", {"numbers": [6, 7]})) == []
+
+
+def test_ordered_is_still_the_default_so_a_swapped_subtraction_fails():
+    spec = tool_args("subtract_numbers", {"numbers": [10, 3]})
+    out = failures(spec, ("subtract_numbers", {"numbers": [3, 10]}))
+    assert len(out) == 1 and "(any order)" not in out[0]
+
+
+def test_unordered_still_rejects_different_numbers():
+    spec = unordered("multiply_numbers", {"numbers": [6, 7]})
+    out = failures(spec, ("multiply_numbers", {"numbers": [6, 8]}))
+    assert len(out) == 1 and "(any order)" in out[0]
+
+
+def test_unordered_counts_duplicates():
+    spec = unordered("add_numbers", {"numbers": [6, 6, 7]})
+    assert failures(spec, ("add_numbers", {"numbers": [6, 7, 6]})) == []
+    assert failures(spec, ("add_numbers", {"numbers": [7, 7, 6]})) != []
+    assert failures(unordered("add_numbers", {"numbers": [6, 7]}), ("add_numbers", {"numbers": [6, 6, 7]})) != []
+
+
+def test_unordered_uses_the_numeric_tolerance():
+    spec = unordered("add_numbers", {"numbers": [1, 2.5]})
+    assert failures(spec, ("add_numbers", {"numbers": [2.5000000000001, 1.0]})) == []
+
+
+def test_unordered_leaves_other_arguments_alone():
+    spec = unordered("power_tool", {"base": 2, "exponent": 10})
+    assert failures(spec, ("power_tool", {"base": 2, "exponent": 10})) == []
+    assert failures(spec, ("power_tool", {"base": 10, "exponent": 2})) != []  # not a list: still strict

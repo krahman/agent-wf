@@ -7,6 +7,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from pydantic import BaseModel, ConfigDict, Field
 
+from tests.evals.numbers import has_word, number_tokens, states_number
+
 _SHOW = 300
 
 
@@ -15,6 +17,16 @@ class ToolArgsCheck(BaseModel):
 
     tool: str
     args: dict[str, Any]
+    unordered: bool = False  # compare list arguments regardless of order (for commutative operations)
+
+
+class AnswerNumber(BaseModel):
+    """The answer must state `value` as a number, or (optionally) one of `words` as a whole word."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: float
+    words: list[str] = Field(default_factory=list)
 
 
 class Checks(BaseModel):
@@ -25,6 +37,7 @@ class Checks(BaseModel):
     expect_tools: list[str] = Field(default_factory=list)
     forbid_tools: list[str] = Field(default_factory=list)
     tool_args: list[ToolArgsCheck] = Field(default_factory=list)
+    answer_number: list[AnswerNumber] = Field(default_factory=list)
     answer_contains_any: list[str] = Field(default_factory=list)
     answer_contains_all: list[str] = Field(default_factory=list)
     answer_excludes: list[str] = Field(default_factory=list)
@@ -66,20 +79,37 @@ def _short(text: str) -> str:
     return text if len(text) <= _SHOW else text[:_SHOW] + "..."
 
 
-def _values_match(expected: Any, actual: Any) -> bool:
+def _values_match(expected: Any, actual: Any, unordered: bool = False) -> bool:
     if isinstance(expected, bool) or isinstance(actual, bool):
         return expected is actual
     if isinstance(expected, int | float) and isinstance(actual, int | float):
         return math.isclose(expected, actual, rel_tol=1e-9, abs_tol=1e-9)
     if isinstance(expected, list) and isinstance(actual, list):
-        return len(expected) == len(actual) and all(_values_match(e, a) for e, a in zip(expected, actual))
+        if len(expected) != len(actual):
+            return False
+        if unordered:
+            return _same_items(expected, actual, unordered)
+        return all(_values_match(e, a, unordered) for e, a in zip(expected, actual))
     if isinstance(expected, dict) and isinstance(actual, dict):
-        return all(k in actual and _values_match(v, actual[k]) for k, v in expected.items())
+        return all(k in actual and _values_match(v, actual[k], unordered) for k, v in expected.items())
     return expected == actual
 
 
-def _args_match(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
-    return _values_match(expected, actual)
+def _same_items(expected: list[Any], actual: list[Any], unordered: bool) -> bool:
+    """Every expected item pairs with a distinct actual item (duplicates are counted)."""
+    remaining = list(actual)
+    for item in expected:
+        for i, candidate in enumerate(remaining):
+            if _values_match(item, candidate, unordered):
+                del remaining[i]
+                break
+        else:
+            return False
+    return True
+
+
+def _args_match(expected: dict[str, Any], actual: dict[str, Any], unordered: bool = False) -> bool:
+    return _values_match(expected, actual, unordered)
 
 
 def run_checks(checks: Checks, trace: Trace) -> list[str]:
@@ -95,9 +125,21 @@ def run_checks(checks: Checks, trace: Trace) -> list[str]:
         if name in called:
             failures.append(f"forbid_tools: {name} was called; calls were {trace.describe_calls()}")
     for want in checks.tool_args:
-        if not any(c.name == want.tool and _args_match(want.args, c.args) for c in trace.tool_calls):
+        if not any(
+            c.name == want.tool and _args_match(want.args, c.args, want.unordered) for c in trace.tool_calls
+        ):
+            order = " (any order)" if want.unordered else ""
             failures.append(
-                f"tool_args: expected {want.tool} with {want.args}; actual calls were {trace.describe_calls()}"
+                f"tool_args: expected {want.tool} with {want.args}{order}; "
+                f"actual calls were {trace.describe_calls()}"
+            )
+    for want in checks.answer_number:
+        if not (states_number(trace.answer, want.value) or has_word(trace.answer, want.words)):
+            found = [text for text, _ in number_tokens(trace.answer)]
+            alternatives = f" (or the words {want.words})" if want.words else ""
+            failures.append(
+                f"answer_number: expected {want.value:g}{alternatives}; the answer states numbers {found}: "
+                f"{_short(trace.answer)!r}"
             )
     if checks.answer_contains_any and not any(s.casefold() in answer for s in checks.answer_contains_any):
         failures.append(

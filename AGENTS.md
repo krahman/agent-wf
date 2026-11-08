@@ -61,11 +61,42 @@ Check it: `docker compose ps api` and `docker exec agent-wf-api-1 id -u` (prints
 
 ## Evals
 Real-model checks of the agent's behaviour (which tools it calls, with what arguments, what it answers). They are opt-in: `uv run pytest` and CI never run them, call no LLM and need no key.
-- Run all: `uv run pytest -m eval` (needs `OPENROUTER_API_KEY`; a run costs a few cents). One case: `uv run pytest -m eval -k divide-by-zero`. List cases without running: `uv run pytest -m eval --collect-only -q`.
-- Options: `--eval-repeats N` (default 3, run at temperature 0), `--eval-min-pass-rate R` (default 1.0; a case passes when this fraction of its repeats pass), `--eval-model NAME` (default `LLM_MODEL`; use it to compare models).
+- Run all: `make eval` (`uv run pytest -m eval`; needs `OPENROUTER_API_KEY`; a run costs a few cents). One case: `make eval ARGS="-k divide-by-zero"`. List cases without running: `make eval-list`.
+- Options: `--eval-repeats N` (default 3, run at temperature 0), `--eval-min-pass-rate R` (default 1.0; a case passes when this fraction of its repeats pass), `--eval-model NAME` (default `LLM_MODEL`; use it to compare models), `--eval-trace` (see below).
 - Each run writes `tests/evals/results/<time>-<model>.json` (model, version, commit, per-case pass rate and failure reasons). It is gitignored; compare two reports after a prompt, tool or model change.
-- Cases live in `tests/evals/cases.yaml`: `id`, `prompt`, `tags` and `checks` (`expect_tools`, `forbid_tools`, `tool_args`, `answer_contains_any`, `answer_contains_all`, `answer_excludes`, `max_tool_calls`). Add one whenever a change breaks something the suite did not catch. Use `*_any` lists for numbers, since models format them differently.
 - The Wikipedia tool's network call (`fetch_pages` in `tools/wikipedia.py`) is stubbed with one fixed page (the Eiffel Tower); the real tool, its description and its formatting still run, so results do not depend on Wikipedia. The scoring logic has ordinary unit tests (`tests/test_eval_*.py`) that run in the default suite.
+
+**Cases** live in `tests/evals/cases.yaml`. Add one whenever a change breaks something the suite did not catch.
+```yaml
+- id: subtract-argument-order
+  prompt: What is 10 minus 3?
+  tags: [subtract, argument_order]
+  checks:
+    expect_tools: [subtract_numbers]
+    tool_args:
+      - tool: subtract_numbers
+        args: {numbers: [10, 3]}      # order matters here
+    answer_number:
+      - value: 7
+- id: add-indonesian
+  prompt: satu ditambah satu
+  tags: [add, non_english]
+  checks:
+    expect_tools: [add_numbers]
+    tool_args:
+      - tool: add_numbers
+        args: {numbers: [1, 1]}
+        unordered: true               # addition is commutative: [1, 1] in any order
+    answer_number:
+      - value: 2
+        words: [dua]                  # a spelled-out alternative (whole word)
+    answer_excludes: [belas, puluh, ratus, ribu]   # rules out "dua belas" (12)
+```
+- Checks: `expect_tools`, `forbid_tools`, `tool_args`, `answer_number`, `answer_contains_any`, `answer_contains_all`, `answer_excludes`, `max_tool_calls`.
+- **Numbers in answers use `answer_number`**, which compares values: `3500`, `3,500`, `3.500` and `3 500` are the same, and `6,25` is 6.25, but 2 never matches inside `12` or `20`. It proves the answer *states* the number somewhere, not that it is the final result, and an ambiguous token like `3.500` matches either reading (3500 or 3.5). Use `answer_contains_*` (case-insensitive substrings) only for phrases.
+- `unordered: true` on a `tool_args` entry ignores the order of list arguments: use it for add and multiply, never for subtract or divide.
+
+**Tracing evals in Langfuse** (opt-in): `make eval ARGS=--eval-trace`. Needs the Langfuse stack up (`make up`) and `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` in `.env`; it works even with `LANGFUSE_TRACING=false`, and a run that cannot trace stops before any model call. Every repeat becomes a trace named `eval:<case-id>`, all in one session named like the report file, tagged `eval`, `case:<id>`, `repeat:<n>` and `model:<name>`, with a boolean `eval_pass` score (false carries the failed checks as its comment). The report then also lists `langfuse.host`, `langfuse.session_id`, each case's `traces` and each failure's `trace_id`. A normal run sends nothing. Filter by the `eval` tag to find or delete eval traces.
 
 ## CI
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. Three jobs, each reproducible locally:

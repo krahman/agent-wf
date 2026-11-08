@@ -117,13 +117,19 @@ def test_finish_session_writes_nothing_when_no_case_ran(tmp_path):
 
 def test_options_are_validated():
     class Config:
-        def __init__(self, repeats, rate, model=None):
-            self.values = {"--eval-repeats": repeats, "--eval-min-pass-rate": rate, "--eval-model": model}
+        def __init__(self, repeats, rate, model=None, trace=False):
+            self.values = {
+                "--eval-repeats": repeats,
+                "--eval-min-pass-rate": rate,
+                "--eval-model": model,
+                "--eval-trace": trace,
+            }
 
         def getoption(self, name):
             return self.values[name]
 
-    assert support.eval_options_from(Config(3, 1.0)) == support.EvalOptions(3, 1.0, None)
+    assert support.eval_options_from(Config(3, 1.0)) == support.EvalOptions(3, 1.0, None, False)
+    assert support.eval_options_from(Config(2, 0.5, "x/y", True)) == support.EvalOptions(2, 0.5, "x/y", True)
     for bad in (Config(0, 1.0), Config(3, 0), Config(3, 1.5)):
         with pytest.raises(pytest.UsageError):
             support.eval_options_from(bad)

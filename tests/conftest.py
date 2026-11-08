@@ -17,6 +17,12 @@ def pytest_addoption(parser):
         help="fraction of repeats that must pass for a case to pass (default 1.0)",
     )
     group.addoption("--eval-model", default=None, help="model to evaluate (default: LLM_MODEL setting)")
+    group.addoption(
+        "--eval-trace",
+        action="store_true",
+        default=False,
+        help="send each eval repeat to Langfuse as a trace with an eval_pass score (needs Langfuse running)",
+    )
 
 
 @pytest.fixture

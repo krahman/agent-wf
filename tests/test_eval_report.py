@@ -76,3 +76,77 @@ def test_commit_is_unknown_when_git_is_unavailable(monkeypatch):
 
     monkeypatch.setattr(report.subprocess, "run", boom)
     assert run_metadata(Settings(_env_file=None), None, 1, 1.0)["commit"] == "unknown"
+
+
+# --- trace links (traced runs only)
+
+TRACE_KEYS = {"langfuse", "traces", "trace_id"}
+
+
+def all_keys(node):
+    """Every dict key anywhere in a report."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield key
+            yield from all_keys(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from all_keys(item)
+
+
+def traced_run(tmp_path, traces=None):
+    from datetime import UTC, datetime
+
+    from tests.evals import support
+
+    started = datetime(2026, 11, 8, 9, 46, 12, tzinfo=UTC)
+    results = [score_case("add", [[], [], []], 1.0), score_case("sub", [[], FAIL, []], 1.0)]
+    traces = traces if traces is not None else {"add": ["t-a1", "t-a2", "t-a3"], "sub": ["t-s1", "t-s2", "t-s3"]}
+    options = support.EvalOptions(repeats=3, min_pass_rate=1.0, model="openai/gpt-4o", trace=True)
+    settings = Settings(_env_file=None, git_sha="abc", langfuse_host="http://lf.test:3000")
+    path = support.finish_session(results, settings, options, tmp_path, started, traces)
+    return path, json.loads(path.read_text())
+
+
+def test_a_traced_report_names_the_session_the_host_and_every_repeats_trace(tmp_path):
+    path, data = traced_run(tmp_path)
+    assert data["langfuse"] == {"host": "http://lf.test:3000", "session_id": path.stem}
+    assert path.stem == "20261108T094612Z-openai-gpt-4o"
+    by_id = {c["id"]: c for c in data["cases"]}
+    assert by_id["add"]["traces"] == ["t-a1", "t-a2", "t-a3"]
+    assert by_id["sub"]["traces"] == ["t-s1", "t-s2", "t-s3"]
+
+
+def test_a_failed_repeat_carries_its_own_trace_id(tmp_path):
+    _, data = traced_run(tmp_path)
+    failing = next(c for c in data["cases"] if c["id"] == "sub")
+    assert failing["failures"] == [{"repeat": 2, "reasons": FAIL, "trace_id": "t-s2"}]
+
+
+def test_a_repeat_without_a_trace_id_has_no_trace_id_field_but_keeps_its_slot(tmp_path):
+    _, data = traced_run(tmp_path, traces={"add": ["t-a1", None, "t-a3"], "sub": ["t-s1", None, "t-s3"]})
+    failing = next(c for c in data["cases"] if c["id"] == "sub")
+    assert failing["traces"] == ["t-s1", None, "t-s3"]
+    assert "trace_id" not in failing["failures"][0]
+
+
+def test_an_untraced_report_has_no_trace_fields_at_all(tmp_path):
+    from datetime import UTC, datetime
+
+    from tests.evals import support
+
+    results = [score_case("add", [[], []], 1.0), score_case("sub", [FAIL, []], 1.0)]
+    options = support.EvalOptions(repeats=2, min_pass_rate=1.0, model="x/y")  # trace defaults to False
+    settings = Settings(_env_file=None, git_sha="abc")
+    stale_traces = {"add": ["should-not-appear"], "sub": ["nor-this"]}
+    path = support.finish_session(results, settings, options, tmp_path, datetime(2026, 1, 1, tzinfo=UTC), stale_traces)
+    data = json.loads(path.read_text())
+    assert not TRACE_KEYS & set(all_keys(data)), set(all_keys(data))
+    assert "should-not-appear" not in path.read_text()
+
+
+def test_the_untraced_report_is_exactly_what_it_was_before_tracing_existed(tmp_path):
+    report = build_report(meta(), [score_case("add", [[], FAIL], 1.0)])
+    assert list(report) == ["model", "version", "commit", "repeats", "min_pass_rate", "started_at", "passed", "cases"]
+    assert list(report["cases"][0]) == ["id", "passed", "pass_rate", "repeats", "passed_repeats", "failures"]
+    assert list(report["cases"][0]["failures"][0]) == ["repeat", "reasons"]

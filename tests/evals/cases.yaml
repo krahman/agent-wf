@@ -1,7 +1,10 @@
 # Eval cases: each runs the agent against a real model; `uv run pytest -m eval` (see AGENTS.md).
 # Checks are plain assertions on the tools called and the final answer; see tests/evals/harness.py.
-# Answer checks use *_any lists because models format numbers differently (6.25 / 6,25, 3500 / 3,500),
-# and answer in the prompt's language, so a non-English answer may spell the number out ("dua").
+# Numbers in answers are checked with `answer_number`, which compares values, so 3500 / 3,500 / 3.500 and
+# 6.25 / 6,25 all match while 2 never matches inside 12 or 20. The model also answers in the prompt's
+# language and may spell a number out: list those as `words` (whole words) and rule out compounds with
+# `answer_excludes` ("dua" is inside "dua belas"). `unordered: true` on `tool_args` is for commutative
+# operations, where the numbers may come in any order; leave it off where order matters (subtract, divide).
 
 - id: add-basic
   prompt: What is 17 plus 25?
@@ -12,7 +15,9 @@
     tool_args:
       - tool: add_numbers
         args: {numbers: [17, 25]}
-    answer_contains_any: ["42"]
+        unordered: true
+    answer_number:
+      - value: 42
     max_tool_calls: 2
 
 - id: add-indonesian
@@ -23,7 +28,11 @@
     tool_args:
       - tool: add_numbers
         args: {numbers: [1, 1]}
-    answer_contains_any: ["2", "dua"]
+        unordered: true
+    answer_number:
+      - value: 2
+        words: [dua]
+    answer_excludes: [belas, puluh, ratus, ribu]
 
 - id: multiply-indonesian
   prompt: Berapa tiga kali empat?
@@ -33,7 +42,10 @@
     tool_args:
       - tool: multiply_numbers
         args: {numbers: [3, 4]}
-    answer_contains_any: ["12", "dua belas"]
+        unordered: true
+    answer_number:
+      - value: 12
+        words: [dua belas]
 
 - id: subtract-argument-order
   prompt: What is 10 minus 3?
@@ -43,7 +55,8 @@
     tool_args:
       - tool: subtract_numbers
         args: {numbers: [10, 3]}
-    answer_contains_any: ["7"]
+    answer_number:
+      - value: 7
 
 - id: subtract-chain
   prompt: Start with 100, then subtract 20, then subtract 10.
@@ -53,7 +66,8 @@
     tool_args:
       - tool: subtract_numbers
         args: {numbers: [100, 20, 10]}
-    answer_contains_any: ["70"]
+    answer_number:
+      - value: 70
 
 - id: multiply-basic
   prompt: Multiply 6 by 7.
@@ -63,7 +77,9 @@
     tool_args:
       - tool: multiply_numbers
         args: {numbers: [6, 7]}
-    answer_contains_any: ["42"]
+        unordered: true
+    answer_number:
+      - value: 42
 
 - id: divide-argument-order
   prompt: What is 25 divided by 4?
@@ -73,7 +89,8 @@
     tool_args:
       - tool: divide_numbers
         args: {numbers: [25, 4]}
-    answer_contains_any: ["6.25", "6,25"]
+    answer_number:
+      - value: 6.25
 
 - id: power-basic
   prompt: What is 2 to the power of 10?
@@ -83,7 +100,8 @@
     tool_args:
       - tool: power_tool
         args: {base: 2, exponent: 10}
-    answer_contains_any: ["1024", "1,024", "1.024", "1 024"]
+    answer_number:
+      - value: 1024
 
 - id: multi-step
   prompt: Compute (2 + 3) * 4.
@@ -93,9 +111,12 @@
     tool_args:
       - tool: add_numbers
         args: {numbers: [2, 3]}
+        unordered: true
       - tool: multiply_numbers
         args: {numbers: [5, 4]}
-    answer_contains_any: ["20"]
+        unordered: true
+    answer_number:
+      - value: 20
 
 - id: thousands-separators
   prompt: What is 1,000 plus 2,500?
@@ -105,7 +126,9 @@
     tool_args:
       - tool: add_numbers
         args: {numbers: [1000, 2500]}
-    answer_contains_any: ["3500", "3,500", "3.500", "3 500"]
+        unordered: true
+    answer_number:
+      - value: 3500
 
 - id: negative-numbers
   prompt: What is -5 plus 3?
@@ -115,7 +138,10 @@
     tool_args:
       - tool: add_numbers
         args: {numbers: [-5, 3]}
-    answer_contains_any: ["-2", "−2", "negative 2", "minus 2"]
+        unordered: true
+    answer_number:
+      - value: -2
+        words: [negative 2, minus 2]
 
 # Dividing by zero is checked two ways. Left to itself, the model never sends a zero divisor to the
 # calculator: asked directly, or after computing 5 - 5, it answers from knowledge (observed with
@@ -147,11 +173,14 @@
     tool_args:
       - tool: multiply_numbers
         args: {numbers: [123456, 654321]}
-    answer_contains_any: ["80779853376", "80,779,853,376", "80.779.853.376", "80 779 853 376"]
+        unordered: true
+    answer_number:
+      - value: 80779853376
 
 - id: lookup-then-calculate
   prompt: How tall is the Eiffel Tower in metres, and what is that height multiplied by 2?
   tags: [lookup, multiply]
   checks:
     expect_tools: [search_wikipedia, multiply_numbers]
-    answer_contains_any: ["660"]
+    answer_number:
+      - value: 660
