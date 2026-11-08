@@ -197,6 +197,22 @@ def test_build_and_up_pass_the_commit_and_build_tags_the_version():
     assert "GIT_SHA=abc1234 docker compose up -d --build" in dry("up", "GIT_SHA=abc1234")
 
 
+def test_migrate_and_prune_run_the_state_commands_in_the_compose_stack():
+    assert dry("migrate").strip().endswith("docker compose run --rm db-migrate")
+    assert dry("prune").strip().endswith("docker compose run --rm db-migrate python -m agent_wf.state prune")
+    for name in ("migrate", "prune"):
+        assert " -v" not in dry(name) and "down" not in dry(name)
+
+
+def test_test_db_runs_the_db_tests_on_a_throwaway_container_and_always_removes_it():
+    out = dry("test-db", "ARGS=-k lock")
+    assert "docker run -d --rm --name agent-wf-test-db" in out
+    assert "TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:54329/postgres" in out
+    assert "pytest -q tests/db -k lock" in out
+    assert out.rindex("docker stop agent-wf-test-db") > out.index("pytest"), "container is not stopped (and so removed) after the tests"
+    assert "-p 127.0.0.1:" in out, "the test database must not listen on all interfaces"
+
+
 def test_down_never_removes_volumes():
     out = dry("down")
     assert "docker compose down" in out and " -v" not in out

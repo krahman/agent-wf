@@ -15,6 +15,21 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+      REQUIRE_DB_TESTS: "1"  # a missing database fails the run instead of skipping its tests
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

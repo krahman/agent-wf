@@ -43,8 +43,10 @@ def shutdown_tracing() -> None:
         get_client().flush()
 
 
-def trace_context(name: str, session_id: str) -> AbstractContextManager:
-    """Name the trace and group it into a Langfuse session for everything run inside the block."""
+def trace_context(name: str, session_id: str | None) -> AbstractContextManager:
+    """Name the trace and group it into a Langfuse session (when there is one) for everything run inside."""
     if not _enabled:
         return nullcontext()
+    if session_id is None:
+        return propagate_attributes(trace_name=name)
     return propagate_attributes(trace_name=name, session_id=session_id)

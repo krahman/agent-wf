@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     max_prompt_chars: int = 4000
     agent_timeout_seconds: float = 90.0
 
+    database_url: SecretStr | None = None  # conversation state; unset keeps state in process memory
+    state_pool_size: int = 5  # connections per instance; each in-flight conversation run holds one
+    state_retention_days: int = 30
+
     langfuse_tracing: bool = False
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None

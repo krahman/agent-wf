@@ -9,8 +9,9 @@ LangChain agents served by FastAPI, using OpenRouter as the LLM backend.
 - `src/agent_wf/tools/` — one module per domain, registered in `TOOLSETS` (`tools/__init__.py`).
 - `src/agent_wf/agents/` — one `AgentSpec` per agent (prompt + toolset names), registered in `AGENT_SPECS`.
 - `src/agent_wf/api/` — FastAPI app (agents are built in `lifespan`) and request/response schemas.
+- `src/agent_wf/state/` — conversation state: `open_state` (Postgres pool + checkpointer, or in-memory), `thread_lock`, `repair_thread`, `prune_thread` / `prune_idle`, and the operator commands `python -m agent_wf.state migrate|prune`.
 - `src/agent_wf/observability/` — `configure_logging` (request/thread IDs in every log line), `LoggingCallbackHandler` (tool and LLM calls: duration, errors, token usage), `configure_tracing` / `trace_callbacks` (Langfuse).
-- `tests/` — pytest; no network or API key needed. `examples/` — notebooks only.
+- `tests/` — pytest; no network or API key needed (`tests/db/` needs a Postgres and is skipped without `TEST_DATABASE_URL`). `examples/` — notebooks only.
 
 ## Conventions
 - Tools take typed args via a pydantic `args_schema`, and return `{"result": ...}` or `{"error": "..."}`.
@@ -30,8 +31,10 @@ Every error response is JSON: `{"error": {"code": "agent_not_found", "message": 
 | 401 | `unauthorized` | missing or invalid `X-API-Key` |
 | 404 | `agent_not_found` / `not_found` | unknown agent / unknown route |
 | 405 | `method_not_allowed` | wrong HTTP method |
+| 409 | `thread_busy` | another run on the same `thread_id` is still in progress (retry later) |
 | 422 | `invalid_request` | bad body: empty or over-long prompt, unsafe `thread_id` |
 | 422 | `step_limit_exceeded` | agent hit `AGENT_RECURSION_LIMIT` |
+| 503 | `state_unavailable` | the conversation database is unreachable (requests with a `thread_id` only; details are logged) |
 | 502 | `upstream_error` | LLM provider failed (details are logged, never returned) |
 | 504 | `agent_timeout` | run exceeded `AGENT_TIMEOUT_SECONDS` |
 | 500 | `internal_error` | anything unexpected (traceback is logged with the request ID) |
@@ -40,9 +43,20 @@ Raise `ApiError(status, code, message)` from `api/errors.py` for new errors.
 
 ## Limits
 - `prompt`: 1 to `MAX_PROMPT_CHARS` characters (default 4000).
-- `thread_id`: optional, 1 to 64 characters of letters, digits, `-` and `_`; generated when omitted.
+- `thread_id`: optional, 1 to 64 characters of letters, digits, `-` and `_`. Without one the request keeps no conversation state (a stateless single run).
 - One agent run is cancelled after `AGENT_TIMEOUT_SECONDS` (default 90), which bounds the whole loop; `LLM_TIMEOUT` bounds a single model call.
 - Rate limiting and request body size are left to the gateway in front of the API.
+
+## Conversation state
+A request with a `thread_id` continues that conversation; one without it runs statelessly and stores nothing (no database needed either).
+- **Store:** Postgres when `DATABASE_URL` is set (shared by all instances, survives restarts); otherwise process memory with a startup warning (local dev). The API refuses to start if a configured database is unreachable or not migrated. `STATE_POOL_SIZE` (default 5) connections per instance: instances x pool size must fit the database's `max_connections`, and each in-flight conversation run holds one connection (for its lock). Do not put a transaction-mode pooler in between (it breaks the locks).
+- **Migrations are a separate step**, never run by the API: `make migrate` (compose runs the `db-migrate` one-shot service before `api` starts). Safe to repeat and to run concurrently.
+- **One run per thread:** a Postgres advisory lock per `thread_id`; a second simultaneous request gets 409 `thread_busy` and loses nothing. The lock is freed when the run ends for any reason, or when the instance dies.
+- **Repair:** before a run, tool calls left without a result (a run cancelled by the time budget or lost to a crash) get an error result. Without it the model rejects the thread's history (HTTP 400) forever.
+- **Growth and retention:** after each run only the thread's latest checkpoint is kept. Threads idle longer than `STATE_RETENTION_DAYS` (default 30) are deleted by `make prune` / `python -m agent_wf.state prune`; run it on a schedule, once (not per instance). There is no per-conversation delete endpoint yet.
+- **Outage:** requests with a `thread_id` get 503 `state_unavailable` and recover when the database returns; stateless requests and `GET /` are unaffected.
+- Compose runs a separate `app-db` (own volume; password `APP_DB_PASSWORD`, local-dev default, use letters and digits only since it goes into a URL). `make reset` deletes it with the rest.
+- Tests: unit tests use the in-memory store. `tests/db/` runs against a real Postgres, skipped (the `s` in pytest output) unless one is configured: `make test-db` starts a throwaway container, or set `TEST_DATABASE_URL=postgresql://user:pw@localhost:5432/postgres uv run pytest tests/db` (each test creates and drops its own database; CI provides a Postgres service).
 
 ## Wikipedia tool
 `search_wikipedia` makes one request to Wikipedia's search API (`fetch_pages`, via `httpx`) and formats up to 3 intro summaries as `Page: <title>\nSummary: <text>`, capped at 4000 characters. Disambiguation pages are skipped; failures come back as `{"error": ...}`, never as exceptions. Requests time out after 10 s and are retried up to 3 times for network errors, 429 and 5xx.
@@ -56,7 +70,7 @@ Raise `ApiError(status, code, message)` from `api/errors.py` for new errors.
 
 ## Container
 The image runs as uid 10001 (not root) and has a `HEALTHCHECK` on `GET /`, which compose inherits: `docker compose ps` shows `healthy` once the API serves requests.
-`docker compose up` needs `API_KEYS` (and `OPENROUTER_API_KEY`) in `.env`; without them the `api` container exits at startup with a message naming the missing setting.
+`docker compose up` needs `API_KEYS` (and `OPENROUTER_API_KEY`) in `.env`; without them the `api` container exits at startup with a message naming the missing setting. The `api` service waits for `app-db` to be healthy and for `db-migrate` to finish.
 Check it: `docker compose ps api` and `docker exec agent-wf-api-1 id -u` (prints `10001`).
 
 ## Evals
@@ -100,7 +114,7 @@ Real-model checks of the agent's behaviour (which tools it calls, with what argu
 
 ## CI
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. Three jobs, each reproducible locally:
-- `test`: `uv sync --locked` then `uv run pytest` (needs no API key; fails if `uv.lock` is stale).
+- `test`: `uv sync --locked` then `uv run pytest` (needs no API key; fails if `uv.lock` is stale). A `postgres:17` service and `TEST_DATABASE_URL` let it run the `tests/db/` tests too, and `REQUIRE_DB_TESTS=1` makes a missing database fail the run instead of skipping those tests.
 - `lint`: `uv run ruff check` (the `examples/` notebooks are excluded in `pyproject.toml`).
 - `docker`: `docker build .` (nothing is pushed) and `touch .env && docker compose config -q`.
 
@@ -112,14 +126,15 @@ The `Makefile` is the single list of project commands: `make help` shows every t
 | `make install` | `uv sync --locked`, the same install CI does |
 | `make lock` / `make version` | re-resolve dependencies and update `uv.lock` / print the project version |
 | `make dev` | run the API locally with auto-reload (needs `.env`) |
-| `make test` / `make lint` / `make fix` | unit tests (offline) / ruff check / ruff with `--fix` |
+| `make test` / `make test-db` / `make lint` / `make fix` | unit tests (offline) / the `tests/db/` tests on a throwaway Postgres container (needs Docker) / ruff check / ruff with `--fix` |
 | `make check` | everything CI runs, in order: install, tests, lint, image build, compose validation. Needs Docker running, no key and no `.env`; for a quick loop without Docker use `make test lint` |
 | `make eval` / `make eval-quick` / `make eval-list` | the real-model evals (a few cents per run) / only the 3 `quick` cases (about 20 s) / list the cases |
 | `make smoke` | live check of the Wikipedia tool against the real API |
 | `make build` | the image, tagged with the project version and git commit |
-| `make up` / `down` / `logs` / `ps` / `health` | the compose stack (API and Langfuse): start, stop (data kept), follow logs, containers and health, probe `GET /` |
+| `make up` / `down` / `logs` / `ps` / `health` | the compose stack (API, its conversation database and Langfuse): start, stop (data kept), follow logs, containers and health, probe `GET /` |
+| `make migrate` / `make prune` | create or upgrade the conversation-state schema / delete conversations idle longer than `STATE_RETENTION_DAYS` |
 | `make env` / `make keygen` | create `.env` from `.env.example` (never overwrites) / print a new `API_KEYS` value |
 | `make spec-check` | validate all OpenSpec changes and specs |
-| `make clean` / `make reset` | remove caches and eval reports / also delete the compose data volumes, including Langfuse traces and users (refuses without `CONFIRM=yes`) |
+| `make clean` / `make reset` | remove caches and eval reports / also delete the compose data volumes, including conversations and Langfuse traces and users (refuses without `CONFIRM=yes`) |
 
-Conventions: `ARGS="..."` adds options to `test`, `fix`, `eval`, `eval-quick` and `logs` (`make test ARGS="-k limits"`, `make eval ARGS="--eval-repeats 1"`, `make logs ARGS=api`). `UV`, `COMPOSE` and `IMAGE` can be overridden. When CI gains a shell command, add it to `make check` (a test fails otherwise).
+Conventions: `ARGS="..."` adds options to `test`, `test-db`, `fix`, `eval`, `eval-quick` and `logs` (`make test ARGS="-k limits"`, `make eval ARGS="--eval-repeats 1"`, `make logs ARGS=api`). `UV`, `COMPOSE` and `IMAGE` can be overridden. When CI gains a shell command, add it to `make check` (a test fails otherwise).

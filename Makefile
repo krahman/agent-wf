@@ -5,6 +5,7 @@ IMAGE   ?= agent-wf
 API_URL ?= http://localhost:8000
 ARGS    ?=
 CONFIRM ?=
+TEST_DB_PORT ?= 54329
 
 # Looked up only by the targets that use them, so `make help` needs neither uv nor git.
 VERSION = $(shell $(UV) version --short)
@@ -12,14 +13,14 @@ GIT_SHA = $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
 .DEFAULT_GOAL := help
 .NOTPARALLEL:
-.PHONY: help install lock env keygen version dev health test lint fix eval eval-quick eval-list smoke spec-check
-.PHONY: build compose-check up down logs ps reset check clean
+.PHONY: help install lock env keygen version dev health test test-db lint fix eval eval-quick eval-list smoke spec-check
+.PHONY: build compose-check up down logs ps migrate prune reset check clean
 
 help: ## Show this list
 	@awk 'BEGIN { FS = ":.*## " } \
 		/^##@/ { printf "\n%s\n", substr($$0, 5) } \
 		/^[a-zA-Z_-]+:.*## / { printf "  %-14s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@printf '\nOptions: ARGS="..." adds options to test, fix, eval, eval-quick and logs; UV, COMPOSE, IMAGE can be overridden; CONFIRM=yes confirms reset.\n'
+	@printf '\nOptions: ARGS="..." adds options to test, test-db, fix, eval, eval-quick and logs; UV, COMPOSE, IMAGE can be overridden; TEST_DB_PORT moves the test-db port; CONFIRM=yes confirms reset.\n'
 
 ##@ Setup
 install: ## Install locked dependencies (same as CI)
@@ -48,6 +49,14 @@ health: ## Probe the running API (GET /)
 ##@ Quality
 test: ## Run the unit tests, offline (ARGS passes options)
 	$(UV) run pytest -q $(ARGS)
+
+test-db: ## Run the database tests (tests/db) on a throwaway Postgres container (needs Docker; ARGS passes options)
+	@docker stop agent-wf-test-db >/dev/null 2>&1; \
+	docker run -d --rm --name agent-wf-test-db -e POSTGRES_PASSWORD=test -p 127.0.0.1:$(TEST_DB_PORT):5432 docker.io/postgres:17 >/dev/null || exit 1; \
+	n=0; until docker exec agent-wf-test-db pg_isready -h 127.0.0.1 -U postgres -q 2>/dev/null; do \
+	  n=$$((n+1)); [ $$n -lt 60 ] || { echo "the test database did not become ready"; docker stop agent-wf-test-db >/dev/null 2>&1; exit 1; }; sleep 1; done; \
+	TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:$(TEST_DB_PORT)/postgres $(UV) run pytest -q tests/db $(ARGS); rc=$$?; \
+	docker stop agent-wf-test-db >/dev/null 2>&1; exit $$rc
 
 lint: ## Check style and errors with ruff
 	$(UV) run ruff check
@@ -93,8 +102,14 @@ logs: ## Follow the stack's logs (ARGS=api for one service)
 ps: ## Show the stack's containers and their health
 	$(COMPOSE) ps
 
-reset: ## DELETE the stack's data, incl. Langfuse traces, users and projects (needs CONFIRM=yes)
-	@[ "$(CONFIRM)" = yes ] || { echo "refusing: this deletes the Langfuse data volumes (traces, users, projects). To confirm: make reset CONFIRM=yes"; exit 1; }
+migrate: ## Create or upgrade the conversation-state schema (safe to repeat; starts the database if needed)
+	$(COMPOSE) run --rm db-migrate
+
+prune: ## Delete conversations idle longer than STATE_RETENTION_DAYS (default 30); run it on a schedule
+	$(COMPOSE) run --rm db-migrate python -m agent_wf.state prune
+
+reset: ## DELETE the stack's data, incl. conversations and Langfuse traces, users and projects (needs CONFIRM=yes)
+	@[ "$(CONFIRM)" = yes ] || { echo "refusing: this deletes the data volumes (conversations, Langfuse traces, users, projects). To confirm: make reset CONFIRM=yes"; exit 1; }
 	$(COMPOSE) down -v
 
 ##@ Verify

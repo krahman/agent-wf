@@ -1,6 +1,8 @@
 import logging
 
 import openai
+import psycopg
+import psycopg_pool
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -64,9 +66,17 @@ async def _upstream_error(request: Request, exc: openai.APIError) -> JSONRespons
     )
 
 
+async def _state_unavailable(request: Request, exc: Exception) -> JSONResponse:
+    # Driver messages carry the host and user name; they stay in the log.
+    logger.error("conversation state store failed: %s", type(exc).__name__, exc_info=exc)
+    return error_response(request, 503, "state_unavailable", "The conversation store is unavailable")
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ApiError, _api_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(GraphRecursionError, _step_limit)
     app.add_exception_handler(openai.APIError, _upstream_error)
+    app.add_exception_handler(psycopg.Error, _state_unavailable)
+    app.add_exception_handler(psycopg_pool.PoolTimeout, _state_unavailable)

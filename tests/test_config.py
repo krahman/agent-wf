@@ -35,3 +35,15 @@ def test_wikipedia_contact_default_override_and_empty(monkeypatch):
     assert Settings(_env_file=None).wikipedia_contact == "ops@example.com"
     monkeypatch.setenv("WIKIPEDIA_CONTACT", "")
     assert Settings(_env_file=None).wikipedia_contact == default
+
+
+def test_state_defaults_keep_memory_and_bound_retention():
+    s = Settings(_env_file=None)
+    assert s.database_url is None
+    assert s.state_pool_size == 5
+    assert s.state_retention_days == 30
+
+
+def test_database_url_not_in_repr():
+    url = "postgresql://app:hunter2@db:5432/agent_wf"
+    assert "hunter2" not in repr(Settings(_env_file=None, database_url=url))

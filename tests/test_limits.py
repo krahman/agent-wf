@@ -1,8 +1,10 @@
 import pytest
 from langchain_core.messages import AIMessage
 
+from tests.fakes import NoStateAgent, use_agent
 
-class Recorder:
+
+class Recorder(NoStateAgent):
     """Stands in for the LLM or an agent and records how it was called."""
 
     def __init__(self):
@@ -17,7 +19,7 @@ class Recorder:
 def recorder(client):
     rec = Recorder()
     client.app.state.llm = rec
-    client.app.state.agents["math"] = rec
+    use_agent(client, rec)
     return rec
 
 
@@ -63,8 +65,8 @@ def test_thread_id_of_64_chars_is_accepted(client, recorder):
     assert client.post("/agents/math", json={"prompt": "x", "thread_id": "a" * 64}).status_code == 200
 
 
-def test_missing_thread_id_gets_a_generated_one(client, recorder):
+def test_missing_thread_id_runs_without_saved_state(client, recorder):
     client.post("/agents/math", json={"prompt": "x"})
     client.post("/agents/math", json={"prompt": "x"})
-    ids = [c["configurable"]["thread_id"] for c in recorder.calls]
-    assert all(ids) and ids[0] != ids[1]
+    assert len(recorder.calls) == 2
+    assert all("configurable" not in c for c in recorder.calls)

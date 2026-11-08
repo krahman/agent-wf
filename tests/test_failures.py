@@ -9,7 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from agent_wf.agents import AGENT_SPECS
 from agent_wf.config import get_settings
-from tests.fakes import FakeLLM
+from tests.fakes import FakeLLM, NoStateAgent, use_agent
 
 
 def looping_llm() -> FakeLLM:
@@ -25,7 +25,7 @@ def test_step_limit_is_reported_as_422(client, monkeypatch):
     monkeypatch.setenv("AGENT_RECURSION_LIMIT", "3")
     get_settings.cache_clear()
     client.app.state.agents["math"] = AGENT_SPECS["math"].build(looping_llm(), InMemorySaver())
-    r = client.post("/agents/math", json={"prompt": "x"})
+    r = client.post("/agents/math", json={"prompt": "x", "thread_id": "t-step"})
     assert r.status_code == 422
     error = r.json()["error"]
     assert error["code"] == "step_limit_exceeded"
@@ -33,7 +33,7 @@ def test_step_limit_is_reported_as_422(client, monkeypatch):
     assert "answer" not in r.json()
 
 
-class FailingProvider:
+class FailingProvider(NoStateAgent):
     def __init__(self, exc):
         self.exc = exc
 
@@ -52,7 +52,7 @@ PROVIDER_ERRORS = [
 @pytest.mark.parametrize("target", ["agent", "chat"])
 def test_provider_failures_are_502_without_provider_detail(client, caplog, exc, target):
     if target == "agent":
-        client.app.state.agents["math"] = FailingProvider(exc)
+        use_agent(client, FailingProvider(exc))
         path = "/agents/math"
     else:
         client.app.state.llm = FailingProvider(exc)

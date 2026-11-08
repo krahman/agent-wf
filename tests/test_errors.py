@@ -1,3 +1,6 @@
+from tests.fakes import NoStateAgent, use_agent
+
+
 def assert_envelope(response, status, code):
     assert response.status_code == status
     error = response.json()["error"]
@@ -32,7 +35,7 @@ def test_request_id_from_caller_is_echoed(client):
     assert r.json()["error"]["request_id"] == "abc123"
 
 
-class Boom:
+class Boom(NoStateAgent):
     async def ainvoke(self, *args, **kwargs):
         raise RuntimeError("boom-secret-detail")
 
@@ -40,7 +43,7 @@ class Boom:
 def test_unexpected_error_is_safe_and_traceable(client, caplog):
     import logging
 
-    client.app.state.agents["math"] = Boom()
+    use_agent(client, Boom())
     with caplog.at_level(logging.ERROR, logger="agent_wf.api"):
         r = client.post("/agents/math", json={"prompt": "x", "thread_id": "t-500"})
     error = assert_envelope(r, 500, "internal_error")
