@@ -1,0 +1,157 @@
+# Eval cases: each runs the agent against a real model; `uv run pytest -m eval` (see AGENTS.md).
+# Checks are plain assertions on the tools called and the final answer; see tests/evals/harness.py.
+# Answer checks use *_any lists because models format numbers differently (6.25 / 6,25, 3500 / 3,500),
+# and answer in the prompt's language, so a non-English answer may spell the number out ("dua").
+
+- id: add-basic
+  prompt: What is 17 plus 25?
+  tags: [add]
+  checks:
+    expect_tools: [add_numbers]
+    forbid_tools: [search_wikipedia]
+    tool_args:
+      - tool: add_numbers
+        args: {numbers: [17, 25]}
+    answer_contains_any: ["42"]
+    max_tool_calls: 2
+
+- id: add-indonesian
+  prompt: satu ditambah satu
+  tags: [add, non_english]
+  checks:
+    expect_tools: [add_numbers]
+    tool_args:
+      - tool: add_numbers
+        args: {numbers: [1, 1]}
+    answer_contains_any: ["2", "dua"]
+
+- id: multiply-indonesian
+  prompt: Berapa tiga kali empat?
+  tags: [multiply, non_english]
+  checks:
+    expect_tools: [multiply_numbers]
+    tool_args:
+      - tool: multiply_numbers
+        args: {numbers: [3, 4]}
+    answer_contains_any: ["12", "dua belas"]
+
+- id: subtract-argument-order
+  prompt: What is 10 minus 3?
+  tags: [subtract, argument_order]
+  checks:
+    expect_tools: [subtract_numbers]
+    tool_args:
+      - tool: subtract_numbers
+        args: {numbers: [10, 3]}
+    answer_contains_any: ["7"]
+
+- id: subtract-chain
+  prompt: Start with 100, then subtract 20, then subtract 10.
+  tags: [subtract, argument_order]
+  checks:
+    expect_tools: [subtract_numbers]
+    tool_args:
+      - tool: subtract_numbers
+        args: {numbers: [100, 20, 10]}
+    answer_contains_any: ["70"]
+
+- id: multiply-basic
+  prompt: Multiply 6 by 7.
+  tags: [multiply]
+  checks:
+    expect_tools: [multiply_numbers]
+    tool_args:
+      - tool: multiply_numbers
+        args: {numbers: [6, 7]}
+    answer_contains_any: ["42"]
+
+- id: divide-argument-order
+  prompt: What is 25 divided by 4?
+  tags: [divide, argument_order]
+  checks:
+    expect_tools: [divide_numbers]
+    tool_args:
+      - tool: divide_numbers
+        args: {numbers: [25, 4]}
+    answer_contains_any: ["6.25", "6,25"]
+
+- id: power-basic
+  prompt: What is 2 to the power of 10?
+  tags: [power]
+  checks:
+    expect_tools: [power_tool]
+    tool_args:
+      - tool: power_tool
+        args: {base: 2, exponent: 10}
+    answer_contains_any: ["1024", "1,024", "1.024", "1 024"]
+
+- id: multi-step
+  prompt: Compute (2 + 3) * 4.
+  tags: [multi_step, add, multiply]
+  checks:
+    expect_tools: [add_numbers, multiply_numbers]
+    tool_args:
+      - tool: add_numbers
+        args: {numbers: [2, 3]}
+      - tool: multiply_numbers
+        args: {numbers: [5, 4]}
+    answer_contains_any: ["20"]
+
+- id: thousands-separators
+  prompt: What is 1,000 plus 2,500?
+  tags: [add, separators]
+  checks:
+    expect_tools: [add_numbers]
+    tool_args:
+      - tool: add_numbers
+        args: {numbers: [1000, 2500]}
+    answer_contains_any: ["3500", "3,500", "3.500", "3 500"]
+
+- id: negative-numbers
+  prompt: What is -5 plus 3?
+  tags: [add, negative]
+  checks:
+    expect_tools: [add_numbers]
+    tool_args:
+      - tool: add_numbers
+        args: {numbers: [-5, 3]}
+    answer_contains_any: ["-2", "−2", "negative 2", "minus 2"]
+
+# Dividing by zero is checked two ways. Left to itself, the model never sends a zero divisor to the
+# calculator: asked directly, or after computing 5 - 5, it answers from knowledge (observed with
+# gpt-4o), so the direct case only checks that it never invents a number. The tool-path case names the
+# tool, which is the only way to exercise "if a tool returns an error, report it instead of guessing".
+- id: divide-by-zero-direct
+  prompt: What is 10 divided by 0?
+  tags: [divide, divide_by_zero]
+  checks:
+    answer_contains_any: ["zero", "cannot", "can't", "not possible", "impossible", "undefined"]
+    answer_excludes: ["infinity", "∞"]
+
+- id: divide-by-zero-reports-the-error
+  prompt: Use the divide tool to divide 100 by 0, and tell me exactly what the tool returned.
+  tags: [divide, divide_by_zero]
+  checks:
+    expect_tools: [divide_numbers]
+    tool_args:
+      - tool: divide_numbers
+        args: {numbers: [100, 0]}
+    answer_contains_any: ["cannot divide by zero", "can't divide by zero", "division by zero", "divide by zero"]
+    answer_excludes: ["infinity", "∞"]
+
+- id: large-calculation-uses-a-tool
+  prompt: "Quick question, no need to be exact: what is 123456 times 654321?"
+  tags: [multiply, no_guess]
+  checks:
+    expect_tools: [multiply_numbers]
+    tool_args:
+      - tool: multiply_numbers
+        args: {numbers: [123456, 654321]}
+    answer_contains_any: ["80779853376", "80,779,853,376", "80.779.853.376", "80 779 853 376"]
+
+- id: lookup-then-calculate
+  prompt: How tall is the Eiffel Tower in metres, and what is that height multiplied by 2?
+  tags: [lookup, multiply]
+  checks:
+    expect_tools: [search_wikipedia, multiply_numbers]
+    answer_contains_any: ["660"]

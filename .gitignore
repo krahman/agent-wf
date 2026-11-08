@@ -16,3 +16,6 @@ __pycache__/
 
 # Agents
 .claude/settings.local.json
+
+# Eval reports (local, never committed)
+tests/evals/results/

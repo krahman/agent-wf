@@ -30,6 +30,7 @@ dev = [
     { name = "ipykernel" },
     { name = "notebook" },
     { name = "pytest" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 
@@ -49,6 +50,7 @@ dev = [
     { name = "ipykernel" },
     { name = "notebook" },
     { name = "pytest", specifier = ">=8" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 

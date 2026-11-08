@@ -54,6 +54,14 @@ The image runs as uid 10001 (not root) and has a `HEALTHCHECK` on `GET /`, which
 `docker compose up` needs `API_KEYS` (and `OPENROUTER_API_KEY`) in `.env`; without them the `api` container exits at startup with a message naming the missing setting.
 Check it: `docker compose ps api` and `docker exec agent-wf-api-1 id -u` (prints `10001`).
 
+## Evals
+Real-model checks of the agent's behaviour (which tools it calls, with what arguments, what it answers). They are opt-in: `uv run pytest` and CI never run them, call no LLM and need no key.
+- Run all: `uv run pytest -m eval` (needs `OPENROUTER_API_KEY`; a run costs a few cents). One case: `uv run pytest -m eval -k divide-by-zero`. List cases without running: `uv run pytest -m eval --collect-only -q`.
+- Options: `--eval-repeats N` (default 3, run at temperature 0), `--eval-min-pass-rate R` (default 1.0; a case passes when this fraction of its repeats pass), `--eval-model NAME` (default `LLM_MODEL`; use it to compare models).
+- Each run writes `tests/evals/results/<time>-<model>.json` (model, version, commit, per-case pass rate and failure reasons). It is gitignored; compare two reports after a prompt, tool or model change.
+- Cases live in `tests/evals/cases.yaml`: `id`, `prompt`, `tags` and `checks` (`expect_tools`, `forbid_tools`, `tool_args`, `answer_contains_any`, `answer_contains_all`, `answer_excludes`, `max_tool_calls`). Add one whenever a change breaks something the suite did not catch. Use `*_any` lists for numbers, since models format them differently.
+- The Wikipedia tool's network call is stubbed with one fixed passage (the Eiffel Tower), so results do not depend on Wikipedia. The scoring logic has ordinary unit tests (`tests/test_eval_*.py`) that run in the default suite.
+
 ## CI
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. Three jobs, each reproducible locally:
 - `test`: `uv sync --locked` then `uv run pytest` (needs no API key; fails if `uv.lock` is stale).

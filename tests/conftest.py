@@ -5,6 +5,20 @@ from agent_wf.config import get_settings
 TEST_API_KEY = "test-key"
 
 
+def pytest_addoption(parser):
+    # Registered here, not in tests/evals/: pytest only reads options from conftest files loaded
+    # before it parses arguments, and this is the only one it loads for `testpaths = ["tests"]`.
+    group = parser.getgroup("evals", "agent evals (run with: pytest -m eval)")
+    group.addoption("--eval-repeats", type=int, default=3, help="runs per eval case (default 3)")
+    group.addoption(
+        "--eval-min-pass-rate",
+        type=float,
+        default=1.0,
+        help="fraction of repeats that must pass for a case to pass (default 1.0)",
+    )
+    group.addoption("--eval-model", default=None, help="model to evaluate (default: LLM_MODEL setting)")
+
+
 @pytest.fixture
 def app_env(monkeypatch):
     """Environment for tests that start the app: LLM key and API key present, tracing off."""

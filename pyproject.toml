@@ -15,6 +15,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pyyaml",
     "ruff",
     "ipykernel",
     "notebook",
@@ -29,6 +30,8 @@ packages = ["src/agent_wf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not eval'"
+markers = ["eval: runs the agent against a real model (opt-in: pytest -m eval)"]
 
 [tool.ruff]
 extend-exclude = ["examples"]
