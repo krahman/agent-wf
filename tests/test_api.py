@@ -15,8 +15,20 @@ def test_endpoints(monkeypatch):
         app_module, "build_llm", lambda *a, **k: FakeLLM(messages=iter([AIMessage("hi")] * 10))
     )
     with TestClient(app_module.app) as client:
-        assert client.get("/").json() == {"status": "healthy"}
+        assert client.get("/").json()["status"] == "healthy"
         assert client.post("/chat", json={"prompt": "x"}).json() == {"statement": "hi"}
         assert client.post("/agents/math", json={"prompt": "x"}).json() == {"answer": "hi"}
         assert client.post("/agents/nope", json={"prompt": "x"}).status_code == 404
         assert client.post("/chat", json={"prompt": ""}).status_code == 422
+
+
+def test_version_exposed(monkeypatch):
+    from agent_wf import __version__
+
+    monkeypatch.setattr(
+        app_module, "build_llm", lambda *a, **k: FakeLLM(messages=iter([AIMessage("hi")] * 2))
+    )
+    assert app_module.app.version == __version__ != "0.0.0+unknown"
+    with TestClient(app_module.app) as client:
+        body = client.get("/").json()
+        assert body["version"] == __version__ and "commit" in body

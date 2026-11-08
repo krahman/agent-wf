@@ -34,7 +34,10 @@ x-langfuse-env: &langfuse-env
 
 services:
   api:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     env_file: .env
     environment:
       LANGFUSE_TRACING: "true"

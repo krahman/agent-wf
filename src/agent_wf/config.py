@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     llm_timeout: float = 60.0
     agent_recursion_limit: int = 15
     log_level: str = "INFO"
+    git_sha: str = "unknown"  # injected at image build time
 
     langfuse_tracing: bool = False
     langfuse_public_key: str | None = None

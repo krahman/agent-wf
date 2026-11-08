@@ -5,6 +5,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langfuse import Langfuse, get_client, propagate_attributes
 from langfuse.langchain import CallbackHandler
 
+from agent_wf import __version__
 from agent_wf.config import Settings
 
 logger = logging.getLogger("agent_wf.tracing")
@@ -26,6 +27,7 @@ def configure_tracing(settings: Settings) -> None:
         public_key=settings.langfuse_public_key,
         secret_key=settings.langfuse_secret_key.get_secret_value(),
         base_url=settings.langfuse_host,
+        release=f"{__version__}+{settings.git_sha}",
     )
     _enabled = True
     logger.info("langfuse_tracing=True host=%s", settings.langfuse_host)

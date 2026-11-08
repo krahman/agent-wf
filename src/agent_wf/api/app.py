@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
+from agent_wf import __version__
 from agent_wf.agents import AGENT_SPECS
 from agent_wf.api.schemas import AgentRequest, AgentResponse, ChatRequest, ChatResponse
 from agent_wf.config import get_settings
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI):
     shutdown_tracing()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(title="agent-wf", version=__version__, lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -60,7 +61,7 @@ async def request_context(request: Request, call_next):
 
 @app.get("/")
 def root_controller():
-    return {"status": "healthy"}
+    return {"status": "healthy", "version": __version__, "commit": get_settings().git_sha}
 
 
 @app.post("/chat", response_model=ChatResponse)
