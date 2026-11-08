@@ -29,3 +29,6 @@ packages = ["src/agent_wf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+extend-exclude = ["examples"]

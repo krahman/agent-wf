@@ -22,5 +22,11 @@ LangChain agents served by FastAPI, using OpenRouter as the LLM backend.
 - Langfuse (self-hosted, open source) is off by default. Enable with `LANGFUSE_TRACING=true`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` (default `http://localhost:3000`). `thread_id` is sent as the Langfuse session ID. `LOG_LEVEL` sets the log level.
 - `docker compose up --build` runs the API (:8000) and the full Langfuse stack (UI :3000, login `admin@example.com` / `admin12345`) with tracing preconfigured. Compose defaults are local-dev only; override secrets via `.env`.
 
+## CI
+`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. Three jobs, each reproducible locally:
+- `test`: `uv sync --locked` then `uv run pytest` (needs no API key; fails if `uv.lock` is stale).
+- `lint`: `uv run ruff check` (the `examples/` notebooks are excluded in `pyproject.toml`).
+- `docker`: `docker build .` (nothing is pushed) and `touch .env && docker compose config -q`.
+
 ## Commands
 - `uv sync` · `uv run pytest` · `uv run ruff check` · `uv run fastapi dev main.py`
