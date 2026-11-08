@@ -30,8 +30,8 @@ Separate jobs give a distinct red/green status per check and run concurrently. A
 **2. Install with `uv sync --locked`, not `--frozen`.**
 `--frozen` uses the lockfile without checking it, so a stale lock passes silently. `--locked` fails when `pyproject.toml` and `uv.lock` disagree, which is what the spec's reproducibility requirement needs. Alternative: `--frozen` plus a separate `uv lock --check` step. It does the same thing in two steps.
 
-**3. Pin the interpreter from `.python-version`.**
-The test and lint jobs read the Python version from `.python-version` (3.14.7), so CI runs the same interpreter as local development with one place to bump it. Alternative: hard-code `3.14` in the workflow. That would duplicate the version and let it drift.
+**3. Take the interpreter from `.python-version`, via uv itself.**
+The test and lint jobs need no Python setup step: `uv sync` reads `.python-version` (3.14.7) from the project and downloads that interpreter, so CI runs the same Python as local development with one place to bump it. `astral-sh/setup-uv` has no input for this (a `python-version-file` input was tried and ignored, which the first CI run revealed). Alternative: hard-code `3.14` in the workflow. That would duplicate the version and let it drift.
 
 **4. Exclude `examples/` in `pyproject.toml` rather than listing paths in the workflow.**
 Add `[tool.ruff] extend-exclude = ["examples"]` and run plain `uv run ruff check` in CI. Local `uv run ruff check` then passes too, which it currently does not. Alternative: CI runs `ruff check src tests main.py` and the config stays untouched. That keeps the change smaller but leaves bare `ruff check` failing locally, and a new top-level folder would silently be left unlinted.
